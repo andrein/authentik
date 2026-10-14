@@ -26,6 +26,7 @@ import { AKSearchSelect } from "#components/ak-search-select-field";
 import {
     CompatibilityModeEnum,
     OAuthSource,
+    OutgoingSyncDeleteAction,
     SCIMAuthenticationModeEnum,
     SCIMProvider,
     SourcesApi,
@@ -270,6 +271,50 @@ export function renderForm({ provider, errors, update }: SCIMProviderFormProps) 
                         <ak-utils-time-delta-help></ak-utils-time-delta-help>`}
                 >
                 </ak-text-input>
+                <ak-radio-input
+                    name="userDeleteAction"
+                    label=${msg("User deprovisioning action", {
+                        id: "providers.scim.user-delete-action.label",
+                    })}
+                    .value=${provider.userDeleteAction}
+                    required
+                    .options=${[
+                        {
+                            label: msg("Delete", {
+                                id: "providers.scim.user-delete-action.delete",
+                            }),
+                            value: OutgoingSyncDeleteAction.Delete,
+                            default: true,
+                            description: html`${msg("The user is deleted in the remote system.", {
+                                id: "providers.scim.user-delete-action.delete.description",
+                            })}`,
+                        },
+                        {
+                            label: msg("Deactivate", {
+                                id: "providers.scim.user-delete-action.deactivate",
+                            }),
+                            value: OutgoingSyncDeleteAction.Suspend,
+                            description: html`${msg(
+                                "The user is set to inactive in the remote system, and is reactivated if they regain access to the application.",
+                                { id: "providers.scim.user-delete-action.deactivate.description" },
+                            )}`,
+                        },
+                        {
+                            label: msg("Do nothing", {
+                                id: "providers.scim.user-delete-action.do-nothing",
+                            }),
+                            value: OutgoingSyncDeleteAction.DoNothing,
+                            description: html`${msg(
+                                "The user is not modified in the remote system.",
+                                { id: "providers.scim.user-delete-action.do-nothing.description" },
+                            )}`,
+                        },
+                    ]}
+                    help=${msg(
+                        "Determines what happens in the remote system when a user is deleted in authentik or no longer has access to the application.",
+                        { id: "providers.scim.user-delete-action.help" },
+                    )}
+                ></ak-radio-input>
                 <ak-switch-input
                     name="dryRun"
                     label=${msg("Enable dry-run mode")}

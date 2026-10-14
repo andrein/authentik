@@ -142,11 +142,11 @@ class SyncTasks:
             )
             for connection in stale:
                 try:
-                    client.delete(connection.scim_id)
-                    task.info(
-                        f"Deleted out-of-scope {object_type._meta.verbose_name}",
-                        scim_id=connection.scim_id,
-                    )
+                    if client.delete(connection.scim_id) is not None:
+                        task.info(
+                            f"Deprovisioned out-of-scope {object_type._meta.verbose_name}",
+                            scim_id=connection.scim_id,
+                        )
                 except NotFoundSyncException:
                     pass
                 except TransientSyncException as exc:

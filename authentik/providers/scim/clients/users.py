@@ -12,9 +12,15 @@ from authentik.core.models import User
 from authentik.lib.merge import MERGE_LIST_UNIQUE
 from authentik.lib.sync.mapper import PropertyMappingManager
 from authentik.lib.sync.outgoing.exceptions import ObjectExistsSyncException, StopSync
+from authentik.lib.sync.outgoing.models import OutgoingSyncDeleteAction
 from authentik.policies.utils import delete_none_values
 from authentik.providers.scim.clients.base import SCIMClient
-from authentik.providers.scim.clients.schema import SCIM_USER_SCHEMA
+from authentik.providers.scim.clients.schema import (
+    SCIM_USER_SCHEMA,
+    PatchOp,
+    PatchOperation,
+    PatchRequest,
+)
 from authentik.providers.scim.clients.schema import User as SCIMUserSchema
 from authentik.providers.scim.models import SCIMMapping, SCIMProvider, SCIMProviderUser
 
@@ -51,9 +57,41 @@ class SCIMUserClient(SCIMClient[User, SCIMProviderUser, SCIMUserSchema]):
         return scim_user
 
     def delete(self, identifier: str):
-        """Delete user"""
+        """Delete or deactivate user, depending on the provider's user_delete_action"""
+        if self.provider.user_delete_action == OutgoingSyncDeleteAction.DO_NOTHING:
+            return
+        connection = SCIMProviderUser.objects.filter(
+            provider=self.provider, scim_id=identifier
+        ).first()
+        if self.provider.user_delete_action == OutgoingSyncDeleteAction.SUSPEND:
+            return self._deactivate(identifier, connection)
         SCIMProviderUser.objects.filter(provider=self.provider, scim_id=identifier).delete()
         return self._request("DELETE", f"/Users/{identifier}")
+
+    def _deactivate(self, identifier: str, connection: SCIMProviderUser | None):
+        """Set the remote user to inactive, keeping the connection so that the same
+        remote user is reactivated if the user comes back into scope"""
+        if connection and connection.attributes.get("active") is False:
+            return
+        if self._config.patch.supported:
+            response = self._request(
+                "PATCH",
+                f"/Users/{identifier}",
+                json=PatchRequest(
+                    Operations=[PatchOperation(op=PatchOp.replace, path="active", value=False)]
+                ).model_dump(mode="json", exclude_none=True),
+            )
+        else:
+            # The connection is gone when the user was deleted in authentik, so the
+            # remote user is the only complete representation we can PUT back
+            remote_user = self._request("GET", f"/Users/{identifier}")
+            remote_user["active"] = False
+            response = self._request("PUT", f"/Users/{identifier}", json=remote_user)
+        if connection:
+            # PATCH may respond with 204 and no body
+            connection.attributes = response or {**connection.attributes, "active": False}
+            connection.save()
+        return response
 
     def create(self, user: User):
         """Create user from scratch and create a connection object"""

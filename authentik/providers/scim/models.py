@@ -16,7 +16,7 @@ from authentik.core.apps import AppAccessWithoutBindings
 from authentik.core.models import BackchannelProvider, Group, PropertyMapping, User, UserTypes
 from authentik.lib.models import InternallyManagedMixin, SerializerModel, SimpleThroughModel
 from authentik.lib.sync.outgoing.base import BaseOutgoingSyncClient
-from authentik.lib.sync.outgoing.models import OutgoingSyncProvider
+from authentik.lib.sync.outgoing.models import OutgoingSyncDeleteAction, OutgoingSyncProvider
 from authentik.lib.utils.time import timedelta_from_string, timedelta_string_validator
 from authentik.policies.engine import FilterPolicyEngine
 from authentik.providers.scim.clients.auth import SCIMBasicAuth, SCIMTokenAuth
@@ -93,6 +93,14 @@ class SCIMProvider(OutgoingSyncProvider, BackchannelProvider):
     """SCIM 2.0 provider to create users and groups in external applications"""
 
     exclude_users_service_account = models.BooleanField(default=False)
+    user_delete_action = models.TextField(
+        choices=OutgoingSyncDeleteAction.choices,
+        default=OutgoingSyncDeleteAction.DELETE,
+        help_text=_(
+            "Action taken in the remote system when a user is deleted in authentik "
+            "or no longer has access to the application."
+        ),
+    )
 
     group_filters = models.ManyToManyField(
         "authentik_core.group",

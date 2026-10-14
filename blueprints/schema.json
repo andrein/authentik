@@ -13318,6 +13318,16 @@
                     "type": "boolean",
                     "title": "Exclude users service account"
                 },
+                "user_delete_action": {
+                    "type": "string",
+                    "enum": [
+                        "do_nothing",
+                        "delete",
+                        "suspend"
+                    ],
+                    "title": "User delete action",
+                    "description": "Action taken in the remote system when a user is deleted in authentik or no longer has access to the application."
+                },
                 "sync_page_size": {
                     "type": "integer",
                     "minimum": 1,

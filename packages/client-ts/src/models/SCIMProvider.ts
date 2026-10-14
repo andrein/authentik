@@ -16,6 +16,11 @@ import {
     CompatibilityModeEnumFromJSON,
     CompatibilityModeEnumToJSON,
 } from "./CompatibilityModeEnum";
+import type { OutgoingSyncDeleteAction } from "./OutgoingSyncDeleteAction";
+import {
+    OutgoingSyncDeleteActionFromJSON,
+    OutgoingSyncDeleteActionToJSON,
+} from "./OutgoingSyncDeleteAction";
 import type { SCIMAuthenticationModeEnum } from "./SCIMAuthenticationModeEnum";
 import {
     SCIMAuthenticationModeEnumFromJSON,
@@ -91,6 +96,11 @@ export interface SCIMProvider {
      */
     serviceProviderConfigCacheTimeout?: string;
     excludeUsersServiceAccount?: boolean;
+    /**
+     * Action taken in the remote system when a user is deleted in authentik or no longer has access
+     * to the application.
+     */
+    userDeleteAction?: OutgoingSyncDeleteAction;
     /**
      * Controls the number of objects synced in a single task
      */
@@ -244,6 +254,10 @@ export function SCIMProviderFromJSONTyped(json: any, ignoreDiscriminator: boolea
             json["exclude_users_service_account"] == null
                 ? undefined
                 : json["exclude_users_service_account"],
+        userDeleteAction:
+            json["user_delete_action"] == null
+                ? undefined
+                : OutgoingSyncDeleteActionFromJSON(json["user_delete_action"]),
         syncPageSize: json["sync_page_size"] == null ? undefined : json["sync_page_size"],
         syncPageTimeout: json["sync_page_timeout"] == null ? undefined : json["sync_page_timeout"],
         discoveryEnabled: json["discovery_enabled"] == null ? undefined : json["discovery_enabled"],
@@ -290,6 +304,7 @@ export function SCIMProviderToJSONTyped(
         compatibility_mode: CompatibilityModeEnumToJSON(value["compatibilityMode"]),
         service_provider_config_cache_timeout: value["serviceProviderConfigCacheTimeout"],
         exclude_users_service_account: value["excludeUsersServiceAccount"],
+        user_delete_action: OutgoingSyncDeleteActionToJSON(value["userDeleteAction"]),
         sync_page_size: value["syncPageSize"],
         sync_page_timeout: value["syncPageTimeout"],
         discovery_enabled: value["discoveryEnabled"],

@@ -112,6 +112,12 @@ If no users are bound to the SCIM application, the SCIM provider synchronizes al
 
 When a user is no longer assigned to the application—either directly or through a group—and a SCIM sync task runs, that user is deprovisioned from the target SCIM endpoint.
 
+The **User deprovisioning action** setting controls what deprovisioning does. It applies both to users who are no longer assigned to the application and to users who are deleted in authentik:
+
+- **Delete** (default): authentik deletes the user in the target SCIM endpoint.
+- **Deactivate**: authentik sets `active` to `false` on the user in the target SCIM endpoint, using a `PATCH` request when the endpoint supports it and a `PUT` request otherwise. If the user is assigned to the application again, authentik reactivates the same remote user. Use this option for services that don't support deleting users, or that delete everything a user owns along with the user.
+- **Do nothing**: authentik leaves the user in the target SCIM endpoint unchanged.
+
 Use **Exclude service accounts** in the SCIM provider settings when you do not want service accounts to be synchronized.
 
 ### Group filters

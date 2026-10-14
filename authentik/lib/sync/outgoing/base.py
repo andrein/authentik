@@ -127,7 +127,8 @@ class BaseOutgoingSyncClient[
         raise NotImplementedError()
 
     def delete(self, identifier: str):
-        """Delete object from destination"""
+        """Delete object from destination. Returns None when no request was sent,
+        for example when the provider is configured to leave the object in place."""
         raise NotImplementedError()
 
     def to_schema(self, obj: TModel, connection: TConnection | None, **defaults) -> TSchema:

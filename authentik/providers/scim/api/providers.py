@@ -50,6 +50,7 @@ class SCIMProviderSerializer(
             "compatibility_mode",
             "service_provider_config_cache_timeout",
             "exclude_users_service_account",
+            "user_delete_action",
             "sync_page_size",
             "sync_page_timeout",
             "discovery_enabled",

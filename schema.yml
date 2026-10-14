@@ -53207,6 +53207,11 @@ components:
             to disable.
         exclude_users_service_account:
           type: boolean
+        user_delete_action:
+          allOf:
+          - $ref: '#/components/schemas/OutgoingSyncDeleteAction'
+          description: Action taken in the remote system when a user is deleted in
+            authentik or no longer has access to the application.
         sync_page_size:
           type: integer
           maximum: 2147483647
@@ -57669,6 +57674,11 @@ components:
             to disable.
         exclude_users_service_account:
           type: boolean
+        user_delete_action:
+          allOf:
+          - $ref: '#/components/schemas/OutgoingSyncDeleteAction'
+          description: Action taken in the remote system when a user is deleted in
+            authentik or no longer has access to the application.
         sync_page_size:
           type: integer
           maximum: 2147483647
@@ -57809,6 +57819,11 @@ components:
             to disable.
         exclude_users_service_account:
           type: boolean
+        user_delete_action:
+          allOf:
+          - $ref: '#/components/schemas/OutgoingSyncDeleteAction'
+          description: Action taken in the remote system when a user is deleted in
+            authentik or no longer has access to the application.
         sync_page_size:
           type: integer
           maximum: 2147483647

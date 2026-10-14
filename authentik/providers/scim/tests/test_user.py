@@ -13,10 +13,21 @@ from authentik.core.models import Application, Group, User, UserTypes
 from authentik.lib.generators import generate_id
 from authentik.lib.sync.outgoing.base import SAFE_METHODS
 from authentik.lib.sync.outgoing.exceptions import TransientSyncException
+from authentik.lib.sync.outgoing.models import OutgoingSyncDeleteAction
 from authentik.providers.scim.clients.users import SCIMUserClient
 from authentik.providers.scim.models import SCIMMapping, SCIMProvider, SCIMProviderUser
 from authentik.providers.scim.tasks import scim_sync, scim_sync_objects, sync_tasks
 from authentik.tasks.models import Task
+
+PATCH_SUPPORTED_CONFIG = {
+    "patch": {"supported": True},
+    "bulk": {"supported": False},
+    "filter": {"supported": False},
+    "changePassword": {"supported": False},
+    "sort": {"supported": False},
+    "etag": {"supported": False},
+    "authenticationSchemes": [],
+}
 
 
 @patch("authentik.providers.scim.clients.base.SCIMClient.can_discover", False)
@@ -731,6 +742,127 @@ class SCIMUserTests(TestCase):
 
         delete_reqs = [r for r in mock.request_history if r.method == "DELETE"]
         self.assertEqual(len(delete_reqs), 1)
+
+    @Mocker()
+    def test_sync_cleanup_stale_user_suspend_patch(self, mock: Mocker):
+        """Stale users are deactivated with PATCH when supported, and only once"""
+        self.provider.user_delete_action = OutgoingSyncDeleteAction.SUSPEND
+        self.provider.save()
+        scim_id = generate_id()
+        uid = generate_id()
+        mock.get("https://localhost/ServiceProviderConfig", json=PATCH_SUPPORTED_CONFIG)
+        mock.patch(f"https://localhost/Users/{scim_id}", status_code=204)
+        self._create_stale_provider_user(scim_id, uid)
+
+        scim_sync.send(self.provider.pk).get_result()
+        scim_sync.send(self.provider.pk).get_result()
+
+        patch_reqs = [r for r in mock.request_history if r.method == "PATCH"]
+        self.assertEqual(len(patch_reqs), 1)
+        self.assertJSONEqual(
+            patch_reqs[0].body,
+            {
+                "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+                "Operations": [{"op": "replace", "path": "active", "value": False}],
+            },
+        )
+        self.assertFalse([r for r in mock.request_history if r.method == "DELETE"])
+        connection = SCIMProviderUser.objects.get(provider=self.provider, scim_id=scim_id)
+        self.assertFalse(connection.attributes["active"])
+
+    @Mocker()
+    def test_sync_cleanup_stale_user_suspend_put(self, mock: Mocker):
+        """Without PATCH support, stale users are deactivated by writing back the remote
+        user with active set to false"""
+        self.provider.user_delete_action = OutgoingSyncDeleteAction.SUSPEND
+        self.provider.save()
+        scim_id = generate_id()
+        uid = generate_id()
+        remote_user = {
+            "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+            "id": scim_id,
+            "userName": uid,
+            "active": True,
+        }
+        mock.get("https://localhost/ServiceProviderConfig", json={})
+        mock.get(f"https://localhost/Users/{scim_id}", json=remote_user)
+        mock.put(f"https://localhost/Users/{scim_id}", json={**remote_user, "active": False})
+        self._create_stale_provider_user(scim_id, uid)
+
+        scim_sync.send(self.provider.pk).get_result()
+
+        put_reqs = [r for r in mock.request_history if r.method == "PUT"]
+        self.assertEqual(len(put_reqs), 1)
+        self.assertJSONEqual(put_reqs[0].body, {**remote_user, "active": False})
+        self.assertFalse([r for r in mock.request_history if r.method == "DELETE"])
+        connection = SCIMProviderUser.objects.get(provider=self.provider, scim_id=scim_id)
+        self.assertFalse(connection.attributes["active"])
+
+    @Mocker()
+    def test_sync_cleanup_stale_user_suspend_reactivate(self, mock: Mocker):
+        """A deactivated user coming back into scope reactivates the same remote user"""
+        self.provider.user_delete_action = OutgoingSyncDeleteAction.SUSPEND
+        self.provider.save()
+        scim_id = generate_id()
+        uid = generate_id()
+        mock.get("https://localhost/ServiceProviderConfig", json=PATCH_SUPPORTED_CONFIG)
+        mock.patch(f"https://localhost/Users/{scim_id}", status_code=204)
+        mock.put(f"https://localhost/Users/{scim_id}", json={"id": scim_id, "active": True})
+        user = self._create_stale_provider_user(scim_id, uid)
+        scim_sync.send(self.provider.pk).get_result()
+
+        user.type = UserTypes.INTERNAL
+        user.save()
+
+        put_reqs = [r for r in mock.request_history if r.method == "PUT"]
+        self.assertEqual(len(put_reqs), 1)
+        self.assertTrue(loads(put_reqs[0].body)["active"])
+        self.assertFalse([r for r in mock.request_history if r.method in ("POST", "DELETE")])
+
+    @Mocker()
+    def test_sync_cleanup_stale_user_do_nothing(self, mock: Mocker):
+        """Stale users are left alone in the remote system"""
+        self.provider.user_delete_action = OutgoingSyncDeleteAction.DO_NOTHING
+        self.provider.save()
+        scim_id = generate_id()
+        uid = generate_id()
+        mock.get("https://localhost/ServiceProviderConfig", json={})
+        self._create_stale_provider_user(scim_id, uid)
+
+        scim_sync.send(self.provider.pk).get_result()
+
+        for request in mock.request_history:
+            self.assertIn(request.method, SAFE_METHODS)
+        self.assertTrue(
+            SCIMProviderUser.objects.filter(provider=self.provider, scim_id=scim_id).exists()
+        )
+
+    @Mocker()
+    def test_user_delete_suspend(self, mock: Mocker):
+        """Deleting a user in authentik deactivates the remote user"""
+        self.provider.user_delete_action = OutgoingSyncDeleteAction.SUSPEND
+        self.provider.save()
+        scim_id = generate_id()
+        uid = generate_id()
+        remote_user = {"id": scim_id, "userName": uid, "active": True}
+        mock.get("https://localhost/ServiceProviderConfig", json={})
+        mock.post("https://localhost/Users", json=remote_user)
+        mock.get(f"https://localhost/Users/{scim_id}", json=remote_user)
+        mock.put(f"https://localhost/Users/{scim_id}", json={**remote_user, "active": False})
+        user = User.objects.create(
+            username=uid,
+            name=f"{uid} {uid}",
+            email=f"{uid}@goauthentik.io",
+        )
+
+        user.delete()
+
+        self.assertEqual(
+            [r.method for r in mock.request_history if r.method not in SAFE_METHODS],
+            ["POST", "PUT"],
+        )
+        put_reqs = [r for r in mock.request_history if r.method == "PUT"]
+        self.assertFalse(loads(put_reqs[0].body)["active"])
 
     @Mocker()
     def test_sync_cleanup_stale_user_dry_run(self, mock: Mocker):
